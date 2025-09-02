@@ -9,6 +9,7 @@ import MessageInput from './MessageInput';
 import RoomSidebar from './RoomSidebar';
 import { Menu, Hash, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 const ChatRoom = () => {
   const { user } = useAuth();
@@ -106,11 +107,14 @@ const ChatRoom = () => {
             </div>
           </div>
 
-          {/* Online Users Count */}
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>{onlineUsers.length}</span>
-            <span className="hidden sm:inline">online</span>
+          {/* Online Users Count & Theme Toggle */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span>{onlineUsers.length}</span>
+              <span className="hidden sm:inline">online</span>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
 
