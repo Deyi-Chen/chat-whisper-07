@@ -8,11 +8,22 @@ export interface Message {
   user_id: string;
   content: string;
   created_at: string;
+  edited_at?: string;
+  deleted_at?: string;
   profiles: {
     display_name: string;
     avatar_url?: string;
     is_guest: boolean;
   };
+  reactions?: Reaction[];
+}
+
+export interface Reaction {
+  id: string;
+  message_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
 }
 
 export interface Room {
@@ -67,6 +78,32 @@ export const useChatRoom = () => {
     }
   }, [currentRoom]);
 
+  // Load reactions for messages
+  const loadReactions = useCallback(async (messageIds: string[]) => {
+    if (messageIds.length === 0) return {};
+
+    const { data: reactionsData, error } = await supabase
+      .from('reactions')
+      .select('*')
+      .in('message_id', messageIds);
+
+    if (error) {
+      console.error('Error loading reactions:', error);
+      return {};
+    }
+
+    // Group reactions by message_id
+    const reactionsByMessage = reactionsData?.reduce((acc, reaction) => {
+      if (!acc[reaction.message_id]) {
+        acc[reaction.message_id] = [];
+      }
+      acc[reaction.message_id].push(reaction);
+      return acc;
+    }, {} as Record<string, Reaction[]>) || {};
+
+    return reactionsByMessage;
+  }, []);
+
   // Load messages for a room
   const loadMessages = useCallback(async (roomId: string, offset = 0, limit = 50) => {
     const { data: messagesData, error: messagesError } = await supabase
@@ -97,7 +134,11 @@ export const useChatRoom = () => {
       return [];
     }
 
-    // Combine messages with profiles
+    // Load reactions for all messages
+    const messageIds = messagesData.map(m => m.id);
+    const reactionsByMessage = await loadReactions(messageIds);
+
+    // Combine messages with profiles and reactions
     const messagesWithProfiles = messagesData.map(message => {
       const profile = profilesData?.find(p => p.user_id === message.user_id);
       return {
@@ -105,12 +146,13 @@ export const useChatRoom = () => {
         profiles: profile || {
           display_name: 'Unknown User',
           is_guest: true
-        }
+        },
+        reactions: reactionsByMessage[message.id] || []
       };
     }).reverse();
 
     return messagesWithProfiles;
-  }, []);
+  }, [loadReactions]);
 
   // Load user presence
   const loadUserPresence = useCallback(async (roomId: string) => {
@@ -215,6 +257,97 @@ export const useChatRoom = () => {
     setLastMessageTime(now);
     return { error: null };
   }, [user, currentRoom, lastMessageTime]);
+
+  // Edit message
+  const editMessage = useCallback(async (messageId: string, content: string) => {
+    if (!user) return { error: 'Not authenticated' };
+
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        content: content.trim(),
+        edited_at: new Date().toISOString()
+      })
+      .eq('id', messageId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error editing message:', error);
+      return { error: 'Failed to edit message' };
+    }
+
+    // Update local state
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, content: content.trim(), edited_at: new Date().toISOString() }
+        : msg
+    ));
+
+    return { error: null };
+  }, [user]);
+
+  // Delete message
+  const deleteMessage = useCallback(async (messageId: string) => {
+    if (!user) return { error: 'Not authenticated' };
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error deleting message:', error);
+      return { error: 'Failed to delete message' };
+    }
+
+    // Update local state
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, deleted_at: new Date().toISOString() }
+        : msg
+    ));
+
+    return { error: null };
+  }, [user]);
+
+  // Add reaction
+  const addReaction = useCallback(async (messageId: string, emoji: string) => {
+    if (!user) return { error: 'Not authenticated' };
+
+    const { error } = await supabase
+      .from('reactions')
+      .insert({
+        message_id: messageId,
+        user_id: user.id,
+        emoji
+      });
+
+    if (error) {
+      console.error('Error adding reaction:', error);
+      return { error: 'Failed to add reaction' };
+    }
+
+    return { error: null };
+  }, [user]);
+
+  // Remove reaction
+  const removeReaction = useCallback(async (reactionId: string) => {
+    if (!user) return { error: 'Not authenticated' };
+
+    const { error } = await supabase
+      .from('reactions')
+      .delete()
+      .eq('id', reactionId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error removing reaction:', error);
+      return { error: 'Failed to remove reaction' };
+    }
+
+    return { error: null };
+  }, [user]);
 
   // Create new room
   const createRoom = useCallback(async (name: string, description?: string) => {
@@ -366,6 +499,10 @@ export const useChatRoom = () => {
     onlineUsers,
     loading,
     sendMessage,
+    editMessage,
+    deleteMessage,
+    addReaction,
+    removeReaction,
     createRoom,
     switchRoom,
     loadMessages: (offset: number) => currentRoom ? loadMessages(currentRoom.id, offset) : Promise.resolve([])

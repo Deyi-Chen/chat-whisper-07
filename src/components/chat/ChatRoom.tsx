@@ -20,6 +20,10 @@ const ChatRoom = () => {
     onlineUsers,
     loading,
     sendMessage,
+    editMessage,
+    deleteMessage,
+    addReaction,
+    removeReaction,
     createRoom,
     switchRoom,
     loadMessages
@@ -123,6 +127,10 @@ const ChatRoom = () => {
           messages={messages}
           loading={loading}
           onLoadMore={handleLoadMore}
+          onEditMessage={editMessage}
+          onDeleteMessage={deleteMessage}
+          onAddReaction={addReaction}
+          onRemoveReaction={removeReaction}
         />
 
         {/* Message Input */}

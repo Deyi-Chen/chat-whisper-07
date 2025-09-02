@@ -3,17 +3,30 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import ChatMessage from './ChatMessage';
+import DateSeparator from './DateSeparator';
 import { Message } from '@/hooks/useChatRoom';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isSameDay } from 'date-fns';
 
 interface MessageListProps {
   messages: Message[];
   loading: boolean;
   onLoadMore?: (offset: number) => Promise<Message[]>;
+  onEditMessage?: (messageId: string, content: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
+  onAddReaction?: (messageId: string, emoji: string) => void;
+  onRemoveReaction?: (reactionId: string) => void;
 }
 
-const MessageList = ({ messages, loading }: MessageListProps) => {
+const MessageList = ({ 
+  messages, 
+  loading, 
+  onEditMessage, 
+  onDeleteMessage, 
+  onAddReaction, 
+  onRemoveReaction 
+}: MessageListProps) => {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -93,9 +106,25 @@ const MessageList = ({ messages, loading }: MessageListProps) => {
           className="h-full"
           onScroll={handleScroll}
         >
-          {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
-          ))}
+          {messages.map((message, index) => {
+            const currentDate = new Date(message.created_at);
+            const prevMessage = messages[index - 1];
+            const prevDate = prevMessage ? new Date(prevMessage.created_at) : null;
+            const showDateSeparator = !prevDate || !isSameDay(currentDate, prevDate);
+
+            return (
+              <div key={message.id}>
+                {showDateSeparator && <DateSeparator date={currentDate} />}
+                <ChatMessage 
+                  message={message} 
+                  onEditMessage={onEditMessage}
+                  onDeleteMessage={onDeleteMessage}
+                  onAddReaction={onAddReaction}
+                  onRemoveReaction={onRemoveReaction}
+                />
+              </div>
+            );
+          })}
         </div>
       </ScrollArea>
 
