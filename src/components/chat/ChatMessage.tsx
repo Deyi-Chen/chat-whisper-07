@@ -34,8 +34,13 @@ const ChatMessage = ({
   const isOwnMessage = user?.id === message.user_id;
   const { color: usernameColor } = useColoredUsername(message.user_id, message.profiles.display_name);
   
-  const timestamp = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
+  // Precise timestamp format: YYYY.MM.DD.HH:mm:ss
+  const preciseTimestamp = format(new Date(message.created_at), 'yyyy.MM.dd.HH:mm:ss');
+  const relativeTimestamp = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
   const fullTimestamp = format(new Date(message.created_at), 'PPp');
+  
+  // Display nickname if available, otherwise display_name
+  const displayName = message.profiles.nickname || message.profiles.display_name;
   
   const isDeleted = !!message.deleted_at;
   const isEdited = !!message.edited_at;
@@ -61,12 +66,13 @@ const ChatMessage = ({
               className="font-medium text-sm"
               style={{ color: usernameColor }}
             >
-              {message.profiles.display_name}
+              {displayName}
               {message.profiles.is_guest && " (Guest)"}
             </span>
-            <span className="text-xs text-muted-foreground" title={fullTimestamp}>
-              {timestamp}
-            </span>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-mono">{preciseTimestamp}</span>
+              <span className="ml-1 opacity-75">({relativeTimestamp})</span>
+            </div>
           </div>
           
           <div className="text-sm text-muted-foreground italic">
@@ -110,12 +116,13 @@ const ChatMessage = ({
             )}
             style={{ color: usernameColor }}
           >
-            {message.profiles.display_name}
+            {displayName}
             {message.profiles.is_guest && " (Guest)"}
           </span>
-          <span className="text-xs text-muted-foreground" title={fullTimestamp}>
-            {timestamp}
-          </span>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-mono">{preciseTimestamp}</span>
+            <span className="ml-1 opacity-75">({relativeTimestamp})</span>
+          </div>
           {isEdited && (
             <span className="text-xs text-muted-foreground">(edited)</span>
           )}
