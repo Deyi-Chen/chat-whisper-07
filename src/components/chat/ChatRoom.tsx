@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useChatRoom } from '@/hooks/useChatRoom';
+import { usePresenceHeartbeat } from '@/hooks/usePresenceHeartbeat';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 import MessageList from './MessageList';
@@ -28,6 +29,12 @@ const ChatRoom = () => {
     switchRoom,
     loadMessages
   } = useChatRoom();
+
+  // Enable presence heartbeat for current room
+  usePresenceHeartbeat({
+    roomId: currentRoom?.id || null,
+    enabled: !!currentRoom
+  });
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sending, setSending] = useState(false);

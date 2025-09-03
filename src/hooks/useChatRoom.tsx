@@ -12,7 +12,10 @@ export interface Message {
   deleted_at?: string;
   profiles: {
     display_name: string;
+    nickname?: string;
+    bio?: string;
     avatar_url?: string;
+    avatar_uploaded_url?: string;
     is_guest: boolean;
   };
   reactions?: Reaction[];
