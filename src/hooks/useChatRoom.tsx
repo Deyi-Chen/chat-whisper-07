@@ -41,9 +41,13 @@ export interface UserPresence {
   user_id: string;
   room_id: string;
   is_online: boolean;
+  last_seen?: string;
   profiles: {
     display_name: string;
+    nickname?: string;
+    bio?: string;
     avatar_url?: string;
+    avatar_uploaded_url?: string;
   };
 }
 
@@ -129,7 +133,7 @@ export const useChatRoom = () => {
     const userIds = [...new Set(messagesData.map(m => m.user_id))];
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
-      .select('user_id, display_name, avatar_url, is_guest')
+      .select('user_id, display_name, nickname, bio, avatar_url, avatar_uploaded_url, is_guest')
       .in('user_id', userIds);
 
     if (profilesError) {
@@ -179,7 +183,7 @@ export const useChatRoom = () => {
     const userIds = presenceData.map(p => p.user_id);
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
-      .select('user_id, display_name, avatar_url')
+      .select('user_id, display_name, nickname, bio, avatar_url, avatar_uploaded_url')
       .in('user_id', userIds);
 
     if (profilesError) {
@@ -446,7 +450,7 @@ export const useChatRoom = () => {
           // Get the profile for the new message
           const { data: profileData } = await supabase
             .from('profiles')
-            .select('display_name, avatar_url, is_guest')
+            .select('display_name, nickname, bio, avatar_url, avatar_uploaded_url, is_guest')
             .eq('user_id', payload.new.user_id)
             .single();
 
