@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Plus, Hash, Users, LogOut, Settings } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import ProfileEditor from './ProfileEditor';
 
 interface RoomSidebarProps {
   rooms: Room[];
@@ -34,7 +36,15 @@ const RoomSidebar = ({
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [userProfile, setUserProfile] = useState<{
+    display_name: string;
+    nickname?: string;
+    bio?: string;
+    avatar_url?: string;
+    avatar_uploaded_url?: string;
+  } | null>(null);
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,24 +86,72 @@ const RoomSidebar = ({
     });
   };
 
+  // Load user profile
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('display_name, nickname, bio, avatar_url, avatar_uploaded_url')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error loading user profile:', error);
+        return;
+      }
+
+      setUserProfile(data);
+    };
+
+    loadUserProfile();
+  }, [user]);
+
+  const handleProfileUpdate = () => {
+    // Reload user profile after update
+    if (user) {
+      supabase
+        .from('profiles')
+        .select('display_name, nickname, bio, avatar_url, avatar_uploaded_url')
+        .eq('user_id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data) setUserProfile(data);
+        });
+    }
+  };
+
+  const displayName = userProfile?.nickname || userProfile?.display_name || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User';
+  const avatarUrl = userProfile?.avatar_uploaded_url || userProfile?.avatar_url;
+
   return (
     <div className={cn("flex flex-col h-full bg-sidebar border-r", className)}>
       {/* User Profile Section */}
       <div className="p-4 border-b bg-sidebar-accent/50">
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8">
+            <AvatarImage src={avatarUrl} />
             <AvatarFallback className="text-xs font-medium">
-              {user?.email?.charAt(0).toUpperCase() || 'U'}
+              {displayName.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">
-              {user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User'}
+              {displayName}
             </p>
             <p className="text-xs text-muted-foreground truncate">
               {user?.user_metadata?.is_guest ? 'Guest User' : 'Registered User'}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsProfileDialogOpen(true)}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -217,6 +275,16 @@ const RoomSidebar = ({
           </ScrollArea>
         </div>
       </div>
+
+      {/* Profile Editor Dialog */}
+      {userProfile && (
+        <ProfileEditor
+          open={isProfileDialogOpen}
+          onOpenChange={setIsProfileDialogOpen}
+          profile={userProfile}
+          onProfileUpdate={handleProfileUpdate}
+        />
+      )}
     </div>
   );
 };
