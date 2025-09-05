@@ -71,11 +71,10 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(fileName, file, { upsert: true });
 
       if (uploadError) {
         throw uploadError;
@@ -83,7 +82,7 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
 
       const { data } = supabase.storage
         .from('avatars')
-        .getPublicUrl(filePath);
+        .getPublicUrl(fileName);
 
       setFormData(prev => ({ ...prev, avatar_url: data.publicUrl }));
       
