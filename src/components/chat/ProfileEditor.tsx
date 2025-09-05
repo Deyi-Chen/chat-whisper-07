@@ -100,7 +100,7 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
           avatar_url: publicUrl,
           avatar_uploaded_url: publicUrl,
         })
-        .eq('user_id', user.id);
+        .eq('id', user.id);
 
       if (dbError) {
         throw dbError;
