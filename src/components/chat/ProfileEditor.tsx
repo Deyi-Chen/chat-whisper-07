@@ -44,7 +44,14 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
   });
 
   const handleAvatarUpload = async (file: File) => {
-    if (!user) return;
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Login required",
+        description: "Sign in to upload an avatar."
+      });
+      return;
+    }
 
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -69,12 +76,12 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
 
     setUploadingAvatar(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const fileExt = file.name.split('.').pop() || 'png';
+      const objectName = `${user.id}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, { upsert: true });
+        .upload(objectName, file, { upsert: true, contentType: file.type });
 
       if (uploadError) {
         throw uploadError;
@@ -82,23 +89,43 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
 
       const { data } = supabase.storage
         .from('avatars')
-        .getPublicUrl(fileName);
+        .getPublicUrl(objectName);
 
-      setFormData(prev => ({ ...prev, avatar_url: data.publicUrl }));
+      const publicUrl = data.publicUrl;
+
+      // Update DB immediately
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({
+          avatar_url: publicUrl,
+          avatar_uploaded_url: publicUrl,
+        })
+        .eq('user_id', user.id);
+
+      if (dbError) {
+        throw dbError;
+      }
+
+      // Update local state for instant preview
+      setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
       
       toast({
-        title: "Avatar uploaded",
-        description: "Your profile picture has been updated."
+        title: "Avatar updated",
+        description: "Looking good, superstar."
       });
+      
+      onProfileUpdate?.();
     } catch (error) {
       console.error('Error uploading avatar:', error);
       toast({
         variant: "destructive",
         title: "Upload failed",
-        description: "Failed to upload avatar. Please try again."
+        description: (error as any)?.message || "Check console/network tab."
       });
     } finally {
       setUploadingAvatar(false);
+      // Reset file input so re-selecting same file retriggers onChange
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -187,7 +214,8 @@ const ProfileEditor = ({ open, onOpenChange, profile, onProfileUpdate }: Profile
                 variant="secondary"
                 className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full p-0"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingAvatar}
+                disabled={uploadingAvatar || !user}
+                title={!user ? "Sign in to upload an avatar" : undefined}
               >
                 {uploadingAvatar ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
