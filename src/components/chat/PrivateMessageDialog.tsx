@@ -1,23 +1,29 @@
 import { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { MessageSquare, Send } from 'lucide-react';
+import { Send, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { toast } from 'sonner';
 
 interface PrivateMessage {
   id: string;
+  content: string;
   sender_id: string;
   recipient_id: string;
-  content: string;
   created_at: string;
   is_read: boolean;
-  sender_profile?: {
+}
+
+interface PrivateMessageDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  recipient: {
+    id: string;
     display_name: string;
     nickname?: string;
     avatar_url?: string;
@@ -25,120 +31,73 @@ interface PrivateMessage {
   };
 }
 
-interface PrivateMessageDialogProps {
-  recipientId: string;
-  recipientName: string;
-  recipientAvatar?: string;
-  children: React.ReactNode;
-}
-
-const PrivateMessageDialog = ({ 
-  recipientId, 
-  recipientName, 
-  recipientAvatar,
-  children 
-}: PrivateMessageDialogProps) => {
-  const { user } = useAuth();
+const PrivateMessageDialog = ({ isOpen, onClose, recipient }: PrivateMessageDialogProps) => {
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const displayName = recipient.nickname || recipient.display_name;
+  const avatarUrl = recipient.avatar_uploaded_url || recipient.avatar_url;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    if (open && user) {
-      loadMessages();
-      
-      // Subscribe to new messages
-      const channel = supabase
-        .channel(`private_messages_${user.id}_${recipientId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'private_messages',
-            filter: `or(and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id}))`
-          },
-          (payload) => {
-            const newMessage = payload.new as PrivateMessage;
-            setMessages(prev => [...prev, newMessage]);
-            scrollToBottom();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [open, user, recipientId]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   const loadMessages = async () => {
     if (!user) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('private_messages')
         .select('*')
-        .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.id})`)
+        .or(`and(sender_id.eq.${user.id},recipient_id.eq.${recipient.id}),and(sender_id.eq.${recipient.id},recipient_id.eq.${user.id})`)
+        .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
-      // Get profiles for senders
-      if (data && data.length > 0) {
-        const senderIds = [...new Set(data.map(msg => msg.sender_id))];
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('user_id, display_name, nickname, avatar_url, avatar_uploaded_url')
-          .in('user_id', senderIds);
-
-        // Add profile data to messages
-        const messagesWithProfiles = data.map(msg => ({
-          ...msg,
-          sender_profile: profiles?.find(p => p.user_id === msg.sender_id)
-        }));
-        
-        setMessages(messagesWithProfiles);
-      } else {
-        setMessages(data || []);
-      }
-
       if (error) throw error;
+      setMessages(data || []);
     } catch (error) {
-      console.error('Error loading messages:', error);
-      toast.error('Failed to load messages');
+      console.error('Error loading private messages:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load messages",
+        variant: "destructive",
+      });
     }
   };
 
   const sendMessage = async () => {
     if (!user || !newMessage.trim()) return;
-    
-    setLoading(true);
+
+    setIsLoading(true);
     try {
       const { error } = await supabase
         .from('private_messages')
         .insert({
           sender_id: user.id,
-          recipient_id: recipientId,
-          content: newMessage.trim()
+          recipient_id: recipient.id,
+          content: newMessage.trim(),
         });
 
       if (error) throw error;
-      
+
       setNewMessage('');
+      toast({
+        title: "Message sent",
+        description: `Your message was sent to ${displayName}`,
+      });
     } catch (error) {
       console.error('Error sending message:', error);
-      toast.error('Failed to send message');
+      toast({
+        title: "Error",
+        description: "Failed to send message",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -149,80 +108,114 @@ const PrivateMessageDialog = ({
     }
   };
 
+  useEffect(() => {
+    if (isOpen) {
+      loadMessages();
+    }
+  }, [isOpen, user, recipient.id]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (!isOpen || !user) return;
+
+    const channel = supabase
+      .channel('private-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'private_messages',
+          filter: `or(and(sender_id.eq.${user.id},recipient_id.eq.${recipient.id}),and(sender_id.eq.${recipient.id},recipient_id.eq.${user.id}))`,
+        },
+        (payload) => {
+          setMessages(prev => [...prev, payload.new as PrivateMessage]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOpen, user, recipient.id]);
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {children}
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md h-[600px] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={recipientAvatar} />
+              <AvatarImage src={avatarUrl} />
               <AvatarFallback>
-                {recipientName.charAt(0).toUpperCase()}
+                {displayName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            Chat with {recipientName}
+            <span>Chat with {displayName}</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={onClose}
+              className="ml-auto"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </DialogTitle>
         </DialogHeader>
-        
-        <ScrollArea className="flex-1 px-1">
-          <div className="space-y-3">
-            {messages.map((message) => {
-              const isOwn = message.sender_id === user?.id;
-              const senderName = message.sender_profile?.nickname || 
-                               message.sender_profile?.display_name || 
-                               (isOwn ? 'You' : recipientName);
-              
-              return (
+
+        <ScrollArea className="flex-1 px-4">
+          <div className="space-y-4">
+            {messages.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                No messages yet. Start the conversation!
+              </div>
+            ) : (
+              messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${
+                    message.sender_id === user?.id ? 'justify-end' : 'justify-start'
+                  }`}
                 >
                   <div
                     className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                      isOwn
+                      message.sender_id === user?.id
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
                     }`}
                   >
-                    {!isOwn && (
-                      <div className="text-xs text-muted-foreground mb-1">
-                        {senderName}
-                      </div>
-                    )}
-                    <div className="text-sm">{message.content}</div>
-                    <div
-                      className={`text-xs mt-1 ${
-                        isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                      }`}
-                    >
+                    <p className="text-sm">{message.content}</p>
+                    <p className="text-xs opacity-70 mt-1">
                       {format(new Date(message.created_at), 'HH:mm')}
-                    </div>
+                    </p>
                   </div>
                 </div>
-              );
-            })}
+              ))
+            )}
             <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
-        
-        <div className="flex gap-2 pt-3 border-t">
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type a message..."
-            disabled={loading}
-          />
-          <Button 
-            onClick={sendMessage} 
-            disabled={loading || !newMessage.trim()}
-            size="icon"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+
+        <div className="flex-shrink-0 p-4 border-t">
+          <div className="flex gap-2">
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type a message..."
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button 
+              onClick={sendMessage} 
+              disabled={isLoading || !newMessage.trim()}
+              size="sm"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
