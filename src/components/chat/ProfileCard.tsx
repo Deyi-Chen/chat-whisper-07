@@ -1,7 +1,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAuth } from '@/hooks/useAuth';
+import PrivateMessageDialog from './PrivateMessageDialog';
 
 interface ProfileCardProps {
   profile: {
@@ -17,8 +21,11 @@ interface ProfileCardProps {
 }
 
 const ProfileCard = ({ profile, userId }: ProfileCardProps) => {
+  const { user } = useAuth();
   const displayName = profile.nickname || profile.display_name;
   const avatarUrl = profile.avatar_uploaded_url || profile.avatar_url;
+  
+  const canMessage = user && user.id !== userId;
   
   return (
     <Card className="w-80 p-0">
@@ -56,6 +63,22 @@ const ProfileCard = ({ profile, userId }: ProfileCardProps) => {
             <p className="text-sm leading-relaxed">
               {profile.bio}
             </p>
+          </div>
+        )}
+
+        {/* Message button */}
+        {canMessage && (
+          <div className="pt-2">
+            <PrivateMessageDialog
+              recipientId={userId}
+              recipientName={displayName}
+              recipientAvatar={avatarUrl}
+            >
+              <Button variant="outline" size="sm" className="w-full">
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Send Message
+              </Button>
+            </PrivateMessageDialog>
           </div>
         )}
 
