@@ -48,6 +48,7 @@ const UserListItem = ({ user }: UserListItemProps) => {
           profile={{
             display_name: user.profiles.display_name,
             nickname: user.profiles.nickname,
+            bio: user.profiles.bio,
             avatar_url: user.profiles.avatar_url,
             avatar_uploaded_url: user.profiles.avatar_uploaded_url,
           }}
